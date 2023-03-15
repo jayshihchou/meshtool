@@ -1,0 +1,13 @@
+{
+    "name": "com.github.jayshihchou.meshviewer",
+    "version": "0.1.0",
+    "displayName": "MeshViewer",
+    "description": "Mesh info viewer",
+    "keywords": [],
+    "author": {
+      "name": "jayshihchou",
+      "email": "jayshihchou@gmail.com",
+      "url": "https://github.com/jayshihchou"
+    }
+  }
+  

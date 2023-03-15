@@ -1,0 +1,16 @@
+{
+    "name": "com.github.jayshihchou.meshviewer",
+    "rootNamespace": "",
+    "references": [
+        "GUID:9fdfad94e7365824da14c62a320b47ef"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
