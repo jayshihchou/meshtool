@@ -68,6 +68,7 @@ public class MeshTool : EditorWindow
     int editCompareVertex = -1;
     Transform compareTrans;
     Vector3[] compareVertices;
+    Vector3[] compareNormals;
     int[] compareLinks;
 
     private void OnSelectionChange()
@@ -174,35 +175,36 @@ public class MeshTool : EditorWindow
     GUIStyle labelStyle;
     float vertexSize = 0.01f;
     float normalSize = 0.01f;
-    readonly HashSet<int> sceneViewIndices = new();
+    HashSet<int> sceneViewIndices = new();
+    HashSet<int> compareSceneViewIndices = new();
 
-    void CheckPointInView(SceneView scene)
+    void CheckPointInView(SceneView scene, HashSet<int> set, Vector3[] verts, Vector3[] norms, Transform trans)
     {
         var cam = scene.camera;
         var camDir = cam.transform.forward;
         Bounds box = new();
         box.SetMinMax(new(0, 0, 0), new(1, 1, cam.farClipPlane));
-        sceneViewIndices.Clear();
-        for (int i = vertices.Length - 1; i >= 0; --i)
+        set.Clear();
+        for (int i = verts.Length - 1; i >= 0; --i)
         {
-            var vertex = vertices[i];
-            var v = transform.TransformPoint(vertex);
+            var vertex = verts[i];
+            var v = trans.TransformPoint(vertex);
             var viewport = cam.WorldToViewportPoint(v);
 
             if (box.Contains(viewport))
             {
                 if (drawFrontOnly)
                 {
-                    var n = normals[i];
-                    n = transform.TransformDirection(n);
+                    var n = norms[i];
+                    n = trans.TransformDirection(n);
                     if (Vector3.Dot(n, camDir) < 0f)
-                        sceneViewIndices.Add(i);
+                        set.Add(i);
                 }
                 else
-                    sceneViewIndices.Add(i);
+                    set.Add(i);
             }
         }
-        // Debug.Log($"draw count: {sceneViewIndices.Count}");
+        // Debug.Log($"draw count: {set.Count}");
     }
 
     Vector3[] moveAllStarts;
@@ -432,7 +434,7 @@ public class MeshTool : EditorWindow
             if (labelStyle == null) labelStyle = new GUIStyle(GUI.skin.label);
             labelStyle.normal.textColor = Color.red;
 
-            CheckPointInView(scene);
+            CheckPointInView(scene, sceneViewIndices, vertices, normals, transform);
 
             if (editMode)
             {
@@ -671,8 +673,10 @@ public class MeshTool : EditorWindow
                 }
                 else
                 {
+                    CheckPointInView(scene, compareSceneViewIndices, compareVertices, compareNormals, compareTrans);
                     for (int i = compareVertices.Length - 1; i >= 0; --i)
                     {
+                        if (!compareSceneViewIndices.Contains(i)) continue;
                         var vertex = compareVertices[i];
                         var v = compareTrans.TransformPoint(vertex);
                         if (Handles.Button(v, Quaternion.identity, vertexSize, vertexSize, Handles.DotHandleCap))
@@ -690,6 +694,7 @@ public class MeshTool : EditorWindow
                     Handles.color = Color.magenta;
                     for (int i = compareVertices.Length - 1; i >= 0; --i)
                     {
+                        if (!compareSceneViewIndices.Contains(i)) continue;
                         if (compareLinks[i] != -1)
                         {
                             Handles.DrawLine(
@@ -1103,10 +1108,15 @@ public class MeshTool : EditorWindow
                     build = true;
                     SceneView.RepaintAll();
                 }
-                if (nextMesh != mesh && GUILayout.Button("Compare Vertex", GUILayout.Width(160f)))
+                if (nextMesh != mesh && GUILayout.Button("Set Compare", GUILayout.Width(160f)))
                 {
                     compareTrans = nextTransform;
                     compareVertices = nextMesh.vertices;
+                    compareNormals = nextMesh.normals;
+                    compareLinks = new int[compareVertices.Length];
+                }
+                if (nextMesh != mesh && GUILayout.Button("Closest Compare", GUILayout.Width(160f)))
+                {
                     compareLinks = new int[compareVertices.Length];
                     for (int i = compareLinks.Length - 1; i >= 0; --i)
                     {
