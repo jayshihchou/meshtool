@@ -12,36 +12,25 @@ public class MeshTool : EditorWindow
         GetWindow<MeshTool>("Mesh Tool");
     }
 
-    string ProjectName
-    {
-        get
-        {
-            var list = Application.dataPath.Split('/');
-            return list[^2];
-        }
-    }
-
     private void OnEnable()
     {
-        var projectName = ProjectName;
-        if (EditorPrefs.HasKey(projectName + ".EditMeshView.output"))
-            output = EditorPrefs.GetString(projectName + ".EditMeshView.output");
-        if (EditorPrefs.HasKey(projectName + ".EditMeshView.vertexSize"))
-            vertexSize = EditorPrefs.GetFloat(projectName + ".EditMeshView.vertexSize");
-        if (EditorPrefs.HasKey(projectName + ".EditMeshView.normalSize"))
-            normalSize = EditorPrefs.GetFloat(projectName + ".EditMeshView.normalSize");
-        if (EditorPrefs.HasKey(projectName + ".EditMeshView.selectedIndex"))
-            selectedIndex = new HashSet<int>(JsonUtility.FromJson<SelectedIndicesData>(EditorPrefs.GetString(projectName + ".EditMeshView.selectedIndex")).data);
+        output = EditorPrefs.GetString($"{nameof(MeshTool)}.{nameof(output)}", string.Empty);
+        linkOutput = EditorPrefs.GetString($"{nameof(MeshTool)}.{nameof(linkOutput)}", string.Empty);
+        vertexSize = EditorPrefs.GetFloat($"{nameof(MeshTool)}.{nameof(vertexSize)}", 0.01f);
+        normalSize = EditorPrefs.GetFloat($"{nameof(MeshTool)}.{nameof(normalSize)}", 0.01f);
+        if (EditorPrefs.HasKey($"{nameof(MeshTool)}.{nameof(selectedIndex)}"))
+            selectedIndex = new HashSet<int>(JsonUtility.FromJson<SelectedIndicesData>(EditorPrefs.GetString($"{nameof(MeshTool)}.{nameof(selectedIndex)}")).data);
         else selectedIndex = new HashSet<int>();
 
-        if (EditorPrefs.HasKey(projectName + ".EditMeshView.savedSelections"))
-            savedSelections = JsonUtility.FromJson<SelectedIndicesCollection>(EditorPrefs.GetString(projectName + ".EditMeshView.savedSelections")).datas;
+        if (EditorPrefs.HasKey($"{nameof(MeshTool)}.{nameof(savedSelections)}"))
+            savedSelections = JsonUtility.FromJson<SelectedIndicesCollection>(EditorPrefs.GetString($"{nameof(MeshTool)}.{nameof(savedSelections)}")).datas;
+        else savedSelections = new List<SelectedIndicesData>();
 
 #if UNITY_2019_1_OR_NEWER
         SceneView.duringSceneGui -= OnScene;
         SceneView.duringSceneGui += OnScene;
 #else
-		SceneView.onSceneGUIDelegate -= OnScene;
+        SceneView.onSceneGUIDelegate -= OnScene;
 		SceneView.onSceneGUIDelegate += OnScene;
 #endif
         wantsMouseMove = true;
@@ -55,12 +44,12 @@ public class MeshTool : EditorWindow
 
     private void OnDisable()
     {
-        var projectName = ProjectName;
-        EditorPrefs.SetString(projectName + ".EditMeshView.output", output);
-        EditorPrefs.SetString(projectName + ".EditMeshView.selectedIndex", JsonUtility.ToJson(new SelectedIndicesData() { data = selectedIndex.ToArray() }));
-        EditorPrefs.SetString(projectName + ".EditMeshView.savedSelections", JsonUtility.ToJson(new SelectedIndicesCollection() { datas = savedSelections }));
-        EditorPrefs.SetFloat(projectName + ".EditMeshView.vertexSize", vertexSize);
-        EditorPrefs.SetFloat(projectName + ".EditMeshView.normalSize", normalSize);
+        EditorPrefs.SetString($"{nameof(MeshTool)}.{nameof(output)}", output);
+        EditorPrefs.SetString($"{nameof(MeshTool)}.{nameof(linkOutput)}", linkOutput);
+        EditorPrefs.SetString($"{nameof(MeshTool)}.{nameof(selectedIndex)}", JsonUtility.ToJson(new SelectedIndicesData() { data = selectedIndex.ToArray() }));
+        EditorPrefs.SetString($"{nameof(MeshTool)}.{nameof(savedSelections)}", JsonUtility.ToJson(new SelectedIndicesCollection() { datas = savedSelections }));
+        EditorPrefs.SetFloat($"{nameof(MeshTool)}.{nameof(vertexSize)}", vertexSize);
+        EditorPrefs.SetFloat($"{nameof(MeshTool)}.{nameof(normalSize)}", normalSize);
         Reset();
 #if UNITY_2019_1_OR_NEWER
         SceneView.duringSceneGui -= OnScene;
@@ -76,6 +65,10 @@ public class MeshTool : EditorWindow
     Mesh mesh;
     Mesh editMesh;
     Mesh nextMesh;
+    int editCompareVertex = -1;
+    Transform compareTrans;
+    Vector3[] compareVertices;
+    int[] compareLinks;
 
     private void OnSelectionChange()
     {
@@ -129,20 +122,10 @@ public class MeshTool : EditorWindow
             Handles.DrawLine(v, v + transform.TransformVector(n).normalized * normalSize);
         }
 
-        // if (subindexMode)
-        // {
-        //     if (selected)
-        //         Handles.color = Color.red;
-        //     else
-        //         Handles.color = Color.yellow;
-        // }
-        // else
-        // {
         if (selected)
             Handles.color = Color.yellow;
         else
             Handles.color = Color.green;
-        // }
 
         bool res = false;
         if (!hideVertex)
@@ -184,17 +167,6 @@ public class MeshTool : EditorWindow
                 res = false;
             }
         }
-
-        // if (hideNotSelected)
-        // {
-        //     if (selected && !hideSelectedIndex)
-        //         Handles.Label(v, index.ToString(), labelStyle);
-        // }
-        // else if (drawIndex || selected)
-        // {
-        //     if(!hideSelectedIndex)
-        //         Handles.Label(v, index.ToString(), labelStyle);
-        // }
 
         return res;
     }
@@ -389,20 +361,6 @@ public class MeshTool : EditorWindow
             vertices[i] = unfoldStarts[i] + dir.normalized * Mathf.Clamp(dirDist * unfoldDistance, 0f, unfoldDistance);
         }
     }
-
-    // void UnfoldGizmos()
-    // {
-    //     foreach (var i in selectedIndex)
-    //     {
-    //         Handles.color = Color.green;
-    //         Handles.DrawWireCube(unfoldSts[i], vertexSize * Vector3.one);
-    //         Handles.color = Color.yellow;
-    //         Handles.DrawLine(unfoldSts[i], unfoldSts[i] + unfoldDirs[i]);
-    //     }
-    //     Handles.color = Color.red;
-    //     Handles.DrawWireCube(unfoldCentre, vertexSize * Vector3.one);
-    //     Handles.color = Color.white;
-    // }
 
     List<int> multiPointsViewList = null;
     int pointViewSelectedIndex = -1;
@@ -628,6 +586,19 @@ public class MeshTool : EditorWindow
                     }
                 }
             }
+            else if (editCompareVertex >= 0)
+            {
+                for (int i = vertices.Length - 1; i >= 0; --i)
+                {
+                    if (ignoredList.Contains(i)) continue;
+                    if (!sceneViewIndices.Contains(i)) continue;
+                    bool selected = selectedIndex.Contains(i);
+                    if (DrawPoint(i, selected))
+                    {
+                        compareLinks[editCompareVertex] = i;
+                    }
+                }
+            }
             else if (hideNotSelected)
             // draw selected
             {
@@ -674,6 +645,57 @@ public class MeshTool : EditorWindow
                         {
                             if (selected) selectedIndex.Remove(i);
                             else selectedIndex.Add(i);
+                        }
+                    }
+                }
+            }
+
+            if (compareVertices != null && compareTrans != null && compareVertices.Length > 0)
+            {
+                Handles.color = Color.cyan;
+                if (editCompareVertex >= 0)
+                {
+                    var vertex = compareVertices[editCompareVertex];
+                    var v = compareTrans.TransformPoint(vertex);
+                    if (compareLinks[editCompareVertex] != -1)
+                    {
+                        Handles.DrawLine(
+                            transform.TransformPoint(vertices[compareLinks[editCompareVertex]]),
+                            v
+                        );
+                    }
+                    if (Handles.Button(v, Quaternion.identity, vertexSize, vertexSize, Handles.DotHandleCap))
+                    {
+                        editCompareVertex = -1;
+                    }
+                }
+                else
+                {
+                    for (int i = compareVertices.Length - 1; i >= 0; --i)
+                    {
+                        var vertex = compareVertices[i];
+                        var v = compareTrans.TransformPoint(vertex);
+                        if (Handles.Button(v, Quaternion.identity, vertexSize, vertexSize, Handles.DotHandleCap))
+                        {
+                            if (editCompareVertex < 0)
+                            {
+                                editCompareVertex = i;
+                            }
+                            else
+                            {
+                                editCompareVertex = -1;
+                            }
+                        }
+                    }
+                    Handles.color = Color.magenta;
+                    for (int i = compareVertices.Length - 1; i >= 0; --i)
+                    {
+                        if (compareLinks[i] != -1)
+                        {
+                            Handles.DrawLine(
+                                transform.TransformPoint(vertices[compareLinks[i]]),
+                                compareTrans.TransformPoint(compareVertices[i])
+                            );
                         }
                     }
                 }
@@ -832,6 +854,7 @@ public class MeshTool : EditorWindow
             return i0 ^ i1 ^ i2;
         }
     }
+
     HashSet<ConnectionTriangle> tempConnection = new();
     void GetConnection(int index)
     {
@@ -847,10 +870,12 @@ public class MeshTool : EditorWindow
             }
         }
     }
+
     void ClearConnection()
     {
         tempConnection.Clear();
     }
+
     void DrawConnection()
     {
         if (tempConnection == null) tempConnection = new();
@@ -885,7 +910,6 @@ public class MeshTool : EditorWindow
     bool hideVertex;
     bool hide;
     bool findSameIndex;
-    // bool subindexMode;
     bool moveAllSelect;
     bool moveAllSelectDiffMode;
     bool rotateAllSelect;
@@ -907,7 +931,6 @@ public class MeshTool : EditorWindow
         {
             findSameIndex = GUILayout.Toggle(findSameIndex, "Find Same", EditorStyles.toolbarButton);
         }
-        // subindexMode = GUILayout.Toggle(subindexMode, "Subindex Mode", EditorStyles.toolbarButton);
         drawFrontOnly = GUILayout.Toggle(drawFrontOnly, "Draw Front Only", EditorStyles.toolbarButton);
 
         GUILayout.FlexibleSpace();
@@ -956,6 +979,7 @@ public class MeshTool : EditorWindow
     int selectStIndex;
     int selectEdIndex;
     string output;
+    string linkOutput;
     string selectionName;
     string save_edited_path;
     Vector2 scrollPos = new();
@@ -995,7 +1019,7 @@ public class MeshTool : EditorWindow
         var ext = System.IO.Path.GetExtension(output);
         HashSet<string> supported = new() { ".jpg", ".png", ".tga", ".exr" };
         if (!supported.Contains(ext))
-            throw new System.Exception($"Input file ext: ({ext}) is not supported. Supported format are (jpg, png).");
+            throw new System.Exception($"Input file ext: ({ext}) is not supported. Supported format are (jpg, png, tga, exr).");
         Texture2D tex = new(textureSize, textureSize);
         var colors = tex.GetPixels32();
         for (int i = colors.Length - 1; i >= 0; --i)
@@ -1046,8 +1070,17 @@ public class MeshTool : EditorWindow
         EditorGUI.BeginDisabledGroup(true);
         EditorGUILayout.ObjectField(mesh, typeof(Mesh), false);
         EditorGUI.EndDisabledGroup();
-        if (mesh != null && GUILayout.Button("reload"))
-            build = true;
+        try
+        // for some reason this part generates errors from gui layout
+        {
+            if (mesh != null && GUILayout.Button("reload"))
+                build = true;
+        }
+        catch (System.Exception)
+        {
+            EditorGUILayout.EndHorizontal();
+            return;
+        }
         EditorGUILayout.EndHorizontal();
 
         if (nextMesh != null)
@@ -1069,6 +1102,17 @@ public class MeshTool : EditorWindow
                     nextTransform = null;
                     build = true;
                     SceneView.RepaintAll();
+                }
+                if (nextMesh != mesh && GUILayout.Button("Compare Vertex", GUILayout.Width(160f)))
+                {
+                    compareTrans = nextTransform;
+                    compareVertices = nextMesh.vertices;
+                    compareLinks = new int[compareVertices.Length];
+                    for (int i = compareLinks.Length - 1; i >= 0; --i)
+                    {
+                        var v = compareTrans.TransformPoint(compareVertices[i]);
+                        compareLinks[i] = FindClosestIndex(transform, vertices, v);
+                    }
                 }
                 EditorGUILayout.EndHorizontal();
             }
@@ -1378,7 +1422,7 @@ public class MeshTool : EditorWindow
                     EditorGUILayout.EndScrollView();
 
                     EditorGUILayout.BeginHorizontal();
-                    EditorGUILayout.LabelField("select texture file");
+                    EditorGUILayout.LabelField("Select vertices from mask texture file");
                     textureFile = EditorGUILayout.TextField(textureFile);
                     if (GUILayout.Button("load"))
                     {
@@ -1393,11 +1437,11 @@ public class MeshTool : EditorWindow
                     if (selectedIndex != null && selectedIndex.Count > 0)
                     {
                         EditorGUILayout.BeginHorizontal();
-                        EditorGUILayout.LabelField("output selected into texture file");
+                        EditorGUILayout.LabelField("Save selected into texture file");
                         exportTexturePath = EditorGUILayout.TextField(exportTexturePath);
-                        EditorGUILayout.LabelField("texture size:", GUILayout.Width(100f));
+                        EditorGUILayout.LabelField("Texture size to export:", GUILayout.Width(100f));
                         exportTextureSize = EditorGUILayout.IntField(exportTextureSize, GUILayout.Width(100f));
-                        if (GUILayout.Button("export"))
+                        if (GUILayout.Button("Export"))
                         {
                             ExportIndexToTexture(exportTexturePath, exportTextureSize, selectedIndex, mesh.uv);
                         }
@@ -1405,72 +1449,22 @@ public class MeshTool : EditorWindow
                     }
 
                     EditorGUILayout.BeginHorizontal();
-                    EditorGUILayout.LabelField("select from sphere collider");
+                    EditorGUILayout.LabelField("Select/Unselect vertices from sphere collider");
                     sphereCollider = (SphereCollider)EditorGUILayout.ObjectField(sphereCollider, typeof(SphereCollider), true);
                     if (sphereCollider != null)
                     {
-                        if (GUILayout.Button("select"))
+                        if (GUILayout.Button("Select"))
                         {
                             SelectFromSphereCollider(sphereCollider);
                             SceneView.RepaintAll();
                         }
-                        if (GUILayout.Button("unselect"))
+                        if (GUILayout.Button("Unselect"))
                         {
                             UnselectFromSphereCollider(sphereCollider);
                             SceneView.RepaintAll();
                         }
                     }
                     EditorGUILayout.EndHorizontal();
-
-                    // testFile = EditorGUILayout.TextField(testFile);
-                    // testFile2 = EditorGUILayout.TextField(testFile2);
-                    // if (!string.IsNullOrEmpty(testFile) && !string.IsNullOrEmpty(testFile2))
-                    // {
-                    // 	if (GUILayout.Button("Test"))
-                    // 	{
-                    // 		selectedIndex.Clear();
-                    // 		//LoadSelectIndex(testFile, selectedIndex);
-                    // 		var uv = mesh.uv;
-                    // 		//foreach (var index in selectedIndex)
-                    // 		//{
-                    // 		//	var v = vertices[index];
-                    // 		//	for (int i = 0, max = vertices.Length; i < max; ++i)
-                    // 		//	{
-                    // 		//		if (i == index) continue;
-                    // 		//		var v2 = vertices[i];
-                    // 		//		if ((v2 - v).sqrMagnitude < Vector3.kEpsilon)
-                    // 		//		{
-                    // 		//			selectedIndex.Add(i);
-                    // 		//		}
-                    // 		//	}
-                    // 		//}
-
-                    // 		//selectedIndex = XRAvatarReal.Utilities.ReadTextureAsIndexHash(testFile, uv);
-                    // 		var hash2 = XRAvatarReal.Utilities.ReadTextureAsIndexHash(testFile2, uv);
-                    // 		foreach (var i in hash2)
-                    // 		{
-                    // 			selectedIndex.Add(i);
-                    // 		}
-                    // 	}
-                    // }
-
-                    // if (hasSelection && subindexMode)
-                    // {
-                    //     EditorGUILayout.BeginVertical(GUI.skin.box);
-                    //     EditorGUILayout.LabelField("subindex mode");
-                    //     EditorGUILayout.BeginHorizontal();
-                    //     if (GUILayout.Button("Select from selected"))
-                    //     {
-                    //         foreach (var i in selectedIndex)
-                    //             subIndex.Add(i);
-                    //     }
-                    //     if (GUILayout.Button("Clear"))
-                    //     {
-                    //         subIndex.Clear();
-                    //     }
-                    //     EditorGUILayout.EndHorizontal();
-                    //     EditorGUILayout.EndVertical();
-                    // }
                 }
             }
             catch (System.Exception e)
@@ -1483,11 +1477,11 @@ public class MeshTool : EditorWindow
         try
         {
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Select vertex range  start :", GUILayout.Width(160f));
+            EditorGUILayout.LabelField("Select vertex range  Start :", GUILayout.Width(160f));
             selectStIndex = EditorGUILayout.IntField(selectStIndex);
-            EditorGUILayout.LabelField("end :", GUILayout.Width(60f));
+            EditorGUILayout.LabelField("End :", GUILayout.Width(60f));
             selectEdIndex = EditorGUILayout.IntField(selectEdIndex);
-            if (GUILayout.Button("select range", GUILayout.Width(160f)))
+            if (GUILayout.Button("Select range", GUILayout.Width(160f)))
             {
                 for (int i = selectStIndex; i < selectEdIndex; ++i)
                     selectedIndex.Add(i);
@@ -1498,29 +1492,35 @@ public class MeshTool : EditorWindow
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField("Select vertex by index : ", GUILayout.Width(160f));
             findIndex = EditorGUILayout.IntField(findIndex);
-            if (GUILayout.Button("select", GUILayout.Width(60f)))
+            if (GUILayout.Button("Select", GUILayout.Width(60f)))
             {
                 selectedIndex.Add(findIndex);
                 SceneView.RepaintAll();
             }
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Save/ Load indices file : ", GUILayout.Width(160f));
+            EditorGUILayout.LabelField("Save / Load indices file : ", GUILayout.Width(160f));
             output = EditorGUILayout.TextField(output);
-            if (GUILayout.Button("output", GUILayout.Width(60f)))
+            if (GUILayout.Button("Save", GUILayout.Width(60f)))
             {
-                // if (subindexMode)
-                //     ExportSubIndex(output, selectedIndex, subIndex);
-                // else
                 ExportSelectIndex(output, selectedIndex);
             }
-            if (GUILayout.Button("load", GUILayout.Width(60f)))
+            if (GUILayout.Button("Load", GUILayout.Width(60f)))
             {
                 selectedIndex.Clear();
-                // if (subindexMode)
-                //     LoadSelectIndex(output, subIndex);
-                // else
                 LoadSelectIndex(output, selectedIndex);
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField("Save / Load compare file : ", GUILayout.Width(160f));
+            linkOutput = EditorGUILayout.TextField(linkOutput);
+            if (GUILayout.Button("Save", GUILayout.Width(60f)))
+            {
+                ExportCompareIndex(linkOutput, compareLinks);
+            }
+            if (GUILayout.Button("Load", GUILayout.Width(60f)))
+            {
+                compareLinks = LoadCompareIndex(linkOutput);
             }
             EditorGUILayout.EndHorizontal();
         }
@@ -1550,6 +1550,22 @@ public class MeshTool : EditorWindow
         {
             RebuildConnection();
         }
+    }
+
+    int FindClosestIndex(Transform t, Vector3[] list, Vector3 item)
+    {
+        float dist = float.MaxValue;
+        int index = 0;
+        for (int i = list.Length - 1; i >= 0; --i)
+        {
+            var d = (t.TransformPoint(list[i]) - item).sqrMagnitude;
+            if (d < dist)
+            {
+                dist = d;
+                index = i;
+            }
+        }
+        return index;
     }
 
     void RebuildConnection()
@@ -1613,6 +1629,34 @@ public class MeshTool : EditorWindow
         {
             selectedIndex.Remove(i);
         }
+    }
+
+    void ExportCompareIndex(string file, int[] compareIndex)
+    {
+        System.Text.StringBuilder sb = new();
+        for (int i = 0, imax = compareIndex.Length; i < imax; ++i)
+        {
+            sb.AppendFormat("{0} {1}\n", i, compareIndex[i]);
+        }
+        System.IO.File.WriteAllText(file, sb.ToString());
+    }
+
+    int[] LoadCompareIndex(string file)
+    {
+        var res = new List<int>();
+        var lines = System.IO.File.ReadAllLines(file);
+        if (lines.Length == 1) lines = lines[0].Split(',');
+        for (int i = 0, max = lines.Length; i < max; ++i)
+        {
+            if (string.IsNullOrEmpty(lines[i]))
+                continue;
+            var each = lines[i].Split(' ');
+            if (each.Length != 2)
+                continue;
+
+            res.Add(int.Parse(each[1]));
+        }
+        return res.ToArray();
     }
 
     void ExportSelectIndex(string file, HashSet<int> set)
