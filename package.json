@@ -1,7 +1,7 @@
 {
-    "name": "com.github.jayshihchou.meshviewer",
+    "name": "com.github.jayshihchou.meshtool",
     "version": "0.1.0",
-    "displayName": "MeshViewer",
+    "displayName": "MeshTool",
     "description": "Mesh info viewer",
     "keywords": [],
     "author": {
